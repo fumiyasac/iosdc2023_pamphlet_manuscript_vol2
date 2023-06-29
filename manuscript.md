@@ -26,21 +26,207 @@
 
 （ここに図解1が入ります）
 
-### 2. `@Published`や`PassthroughSubject`を利用した処理で画面要素と内部ロジック間を結合する処理のポイント
+### 2. `@Published`・`PassthroughSubject`・`AnyPublisher`を利用した処理で画面要素と内部ロジック間を結合する処理のポイント
 
-（※文章の構成が必要）
+ここからは、ViewModelクラス側の構造や想定している処理機構に注目しながらポイントとなり得そうな部分についてコードを交えながら解説ができればと思います。
 
-#### ⭐️2-1. 
+#### ⭐️2-1. UIKitを利用時でのCombineを利用する処理イメージ
 
+UIKitを利用した画面におけるViewModelクラス処理においてCombineをベースとした実装を考えていく場合の一例で、ここでは __PassthroughSubject・AnyPublisher__ を活用する事でViewModel側でInput(入力用)・Output(出力用)の処理を定義し、ViewModel側での画面表示要素データを取得等の処理とViewController側での処理結果に対応した画面表示要素の更新処理を結合する様な処理例を考えてみます。
 
-（ここに図解1が入ります）
+下記の様な形でViewModelクラス内部で展開する、API非同期通信処理やデータ永続化処理を組み合わせる事で実現する様にすると良さそうに思います。
 
+- __Input:__ 画面からViewModel内で定義した処理を実行する
+  👉 __PassthroughSubject<ViewModelに送る値の型, Never>__
+- __InputとOutputの仲介:__ ViewModel内に定義した変数の値変化を受け取る
+  👉 __privateで定義した@Publishedの変数を利用する__
+- __Output:__ ViewModel内に定義した変数の値変化を受け取る
+  👉 __AnyPublisher<期待する値の型, Never>__
+
+後述するコード事例については、Kickstarterというクラウドファンディング事業を展開しているサービスがGithub上でOSSとして公開しているiOSアプリ内で利用されているViewModelクラスでの実装を参考にしています。
+
+- __Kickstarterが公開しているリポジトリ__
+  - GitHub: https://github.com/kickstarter/ios-oss
+- __Kickstarter-iOSのViewModelの作り方がウマかった__
+  - 記事URL: https://qiita.com/muukii/items/045b12405f7acff1a9fd
+- __Introducing ViewModel Inputs/Outputs: a modern approach to MVVM architecture__
+  - 記事URL: https://engineering.mercari.com/en/blog/entry/2019-06-12-120000/
+
+__【🌷記事一覧を取得する「ArticleViewModel.swift」の構築例】__
+
+```swift
+// ----------
+// 📝 ArticlesViewModel.swift
+// 👉 記事データ一覧を取得して画面に表示させる想定のもの
+// ----------
+
+// MARK: - Protocol
+
+protocol ArticlesViewModelInputs {
+    var fetchArticlesTrigger: PassthroughSubject<Void, Never> { get }
+}
+
+protocol ArticlesViewModelOutputs {
+    var articles: AnyPublisher<[Article], Never> { get }
+}
+
+protocol ArticlesViewModelType {
+    var inputs: ArticlesViewModelInputs { get }
+    var outputs: ArticlesViewModelOutputs { get }
+}
+
+final class ArticlesViewModel: ArticlesViewModelType, ArticlesViewModelInputs, ArticlesViewModelOutputs {
+
+    // MARK: - ArticlesViewModelType
+
+    var inputs: ArticlesViewModelInputs { return self }
+    var outputs: ArticlesViewModelOutputs { return self }
+
+    // MARK: - ArticlesViewModelInputs
+
+    let fetchArticlesTrigger = PassthroughSubject<Void, Never>()
+
+    // MARK: - ArticlesViewModelOutputs
+
+    var articles: AnyPublisher<[Article], Never> {
+        return $_articles.eraseToAnyPublisher()
+    }
+
+    private let api: APIRequestManagerProtocol
+
+    private var cancellables: [AnyCancellable] = []
+
+    // MARK: - @Published
+
+    // 👉 InputとOutputを仲介するための変数
+    // fetchArticlesTrigger実行 → この値が更新 → var articles: AnyPublisher<[Article], Never>へ値が流れる
+    @Published private var _articles: [Article] = []
+
+    // MARK: - Initializer
+
+    init(api: APIRequestManagerProtocol) {
+
+        // MEMO: 適用するAPIリクエスト用の処理
+        self.api = api
+
+        // 👉 画面からInputが実行されたらAPIリクエスト処理を実行する
+        fetchArticlesTrigger
+            .sink(
+                receiveValue: { [weak self] in
+                    self?.fetchArticles()
+                }
+            )
+            .store(in: &cancellables)
+    }
+
+    // MARK: - deinit
+
+    deinit {
+        cancellables.forEach { $0.cancel() }
+    }
+
+    // MARK: - Privete Function
+
+    // MEMO: APIリクエストを実行して記事データ一覧の取得をするメソッド
+    private func fetchArticles() {
+        api.getArticles()
+            .receive(on: RunLoop.Articles)
+            .sink(
+                receiveCompletion: { completion in
+                    switch completion {
+                    case .finished:
+                        // MEMO: APIから値取得処理が「成功」した際に実行される部分
+                    case .failure(let error):
+                        // MEMO: APIから値取得処理が「失敗」した際に実行される部分
+                    }
+                },
+                receiveValue: { [weak self] hashableObjects in
+                    // 👉 記事データ一覧が取得できた場合は仲介役となる変数へ反映する
+                    self?._articles = hashableObjects
+                }
+            )
+            .store(in: &cancellables)
+    }
+}
+```
+
+__【🌷記事一覧を取得する「ArticleViewModel.swift」を利用した画面での処理抜粋】__
+
+```swift
+// ----------
+// 📝 ArticlesViewController.swift（処理抜粋）
+// 👉 記事データの一覧を取得して画面に表示させる想定のもの
+// ----------
+
+// ① ViewModel内に定義した処理を実行する
+override func viewWillAppear(_ animated: Bool) {
+    super.viewWillAppear(animated)
+
+    // 👉 ArticleViewModel内に定義した記事データの一覧取得処理を実行する 
+    viewModel.inputs.fetchArticlesTrigger.send()
+}
+
+// ② ViewModel内の処理結果として受け取った値を反映する
+override func viewDidLoad() {
+    super.viewDidLoad()
+
+    // 👉 ArticleViewModel内に定義した`AnyPublisher<[Article], Never>`の値が変化したらその値が流される 
+    viewModel.outputs.articles
+        .subscribe(on: RunLoop.main)
+        .sink(
+            receiveValue: { [weak self] articles in
+                // TODO: 受け取った記事データの一覧を画面表示へ反映する 
+                // ※ UITableViewやUICollectionViewを利用した一覧表示処理等を実行する 
+            }
+        )
+        .store(in: &cancellables)
+}
+```
+
+__【🌷補足（RxSwiftを利用した場合との比較）】__
+
+RxSwiftを利用した処理に馴染みのある方であれば、Combineを利用した処理を記載している部分を下記の様な形に置き換えて考えるとイメージがつきやすいかと思います。私自身もCombineに初めて触れた際は、なかなかPropertyWrapperやOperatorを扱うイメージがなかなか掴めずにいましたが、下記の様なイメージを持って「置き換えながら考えていく」事で徐々にイメージを掴む事ができる様になりました。
+
+```swift
+// 1. Input: 
+
+// (a) RxSwift利用時:
+var fetchArticlesTrigger: PublishSubject<Void> { get }
+// (b) Combine利用時:
+var fetchArticlesTrigger: PassthroughSubject<Void, Never> { get }
+
+// 2. InputとOutputの仲介
+
+// (a) RxSwift利用時: 
+private let _articles: BehaviorRelay<[Article]> = BehaviorRelay<[Article]>(value: [])
+// (b) Combine利用時:
+@Published private var _articles: [Article] = []
+
+// 3. Output
+
+// (a) RxSwift利用時:
+var articles: Observable<[Article]> {
+    return _articles.asObservable()
+}
+// (b) Combine利用時: 
+var articles: AnyPublisher<[Article], Never> {
+    return $_articles.eraseToAnyPublisher()
+}
+```
 
 #### ⭐️2-2. 
 
-（ここに図解1が入ります）
+```swift
+// ----------
+// 📝 NewsViewModel.swift
+// 👉 お知らせデータの一覧を取得して画面に表示させる想定のもの
+// ----------
+```
 
-### 2. 値変化を基準としたCombineベースの処理におけるUnitTestへの工夫
+### 3. 値変化を基準としたCombineベースの処理におけるUnitTestへの工夫
+
+- __CombineExpectations__
+  - GitHub: https://github.com/groue/CombineExpectations
 
 #### ⭐️3-1. 
 
@@ -48,8 +234,11 @@
 
 #### ⭐️3-3. 
 
-#### ⭐️3-4. 
+```swift
 
+```
+
+#### ⭐️3-4. 
 
 ### 余談. その他UnitTestやCombineに関する補足事項
 
@@ -76,7 +265,7 @@ A.Failure == B.Failure, B.Failure == C.Failure, C.Failure == D.Failure
 
 // ----------
 // MEMO: (比較) RxSwiftのSingle.zipはだ最大8つまでObservableをを同時接続可能
-// https://github.com/ReactiveX/RxSwift/blob/main/RxSwift/Observables/Zip%2Barity.swift
+// https://github.com/ReactiveX/RxSwift/blob/Articles/RxSwift/Observables/Zip%2Barity.swift
 // ----------
 public static func zip<E1, E2, E3, E4, E5, E6, E7, E8>(
     _ source1: PrimitiveSequence<Trait, E1>, 
