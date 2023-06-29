@@ -37,11 +37,11 @@ UIKitを利用した画面におけるViewModelクラス処理においてCombin
 下記の様な形でViewModelクラス内部で展開する、API非同期通信処理やデータ永続化処理を組み合わせる事で実現する様にすると良さそうに思います。
 
 - __Input:__ 画面からViewModel内で定義した処理を実行する
-  👉 __PassthroughSubject<ViewModelに送る値の型, Never>__
+  <br>👉 __PassthroughSubject<ViewModelに送る値の型, Never>__
 - __InputとOutputの仲介:__ ViewModel内に定義した変数の値変化を受け取る
-  👉 __privateで定義した@Publishedの変数を利用する__
+  <br>👉 __privateで定義した@Publishedの変数を利用する__
 - __Output:__ ViewModel内に定義した変数の値変化を受け取る
-  👉 __AnyPublisher<期待する値の型, Never>__
+  <br>👉 __AnyPublisher<期待する値の型, Never>__
 
 後述するコード事例については、Kickstarterというクラウドファンディング事業を展開しているサービスがGithub上でOSSとして公開しているiOSアプリ内で利用されているViewModelクラスでの実装を参考にしています。
 
