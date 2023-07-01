@@ -7,4 +7,4 @@
 ### その他
 
 - [プロポーザル](https://fortee.jp/iosdc-japan-2023/proposal/527be76c-336d-448f-9db4-6c2879949c4f)
-- [WIP] 掲載原稿PDF版(Dropbox)
+- [掲載原稿PDF版(Dropbox)](https://www.dropbox.com/s/k7dwi7hri4zxmzj/iOSDC2023%E3%83%91%E3%83%B3%E3%83%95%E5%8E%9F%E7%A8%BF8%E3%83%9A%E3%83%BC%E3%82%B8.pdf?dl=0)
