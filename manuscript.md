@@ -29,7 +29,7 @@
 - __CombineとRxSwiftを比較してみた（※こちらはdely株式会社様のテックブログでの記事になります）__
   👉 https://tech.dely.jp/entry/2019/12/11/103000
 
-[※ここに図解が入ります]
+![001_introduction_image.png](https://github.com/fumiyasac/iosdc2023_pamphlet_manuscript_vol2/blob/main/images/001_introduction_image.png)
 
 ### 2. `@Published`・`PassthroughSubject`・`AnyPublisher`を利用した処理で画面要素と内部ロジック間を結合する処理のポイント
 
