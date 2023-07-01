@@ -22,9 +22,14 @@
 
 本稿では、MVVMアーキテクチャ（Model-ViewModel-View構成）を取る様な画面処理部分に対して、まずは想定している処理イメージをまずは簡単に整理していくことにします。私自身もこれまでの実務経験の中でRxSwiftを活用したコードに触れる機会が数多くありましたので、MVVMアーキテクチャをRxSwiftを利用する場合と、Combineを利用した場合とで簡単に比較してみる事にします。
 
-こちらで例示している例は、比較的簡単なものではありますが、実装の方針次第では、ベースとなる部分においては類似した考え方ができる余地は大いにあるかと思います。
+こちらで例示している例は、比較的簡単なものではありますが、実装の方針次第では、ベースとなる部分においては類似した考え方ができる余地は大いにあるかと思います。また、これまでRxSwiftを利用した開発経験をお持ちの方がCombineの実装へ触れていく際には、Combineの基本事項に加えて下記リンクで紹介している様なチートシート等を活用しながら理解を進めていくのも、有効な手段ではないかと思います。必ずしも"RxSwiftのノリで読み進めていく事ができる訳ではありません"が、類似点や相違点の概要について効率よく知る際の一助となる場合も多いのではないかと思います。
 
-（ここに図解が入ります）
+- __RxSwiftとCombineを比較した際にできること＆できないことをまとめたチートシート__
+  👉 https://github.com/CombineCommunity/rxswift-to-combine-cheatsheet
+- __CombineとRxSwiftを比較してみた（※こちらはdely株式会社様のテックブログでの記事になります）__
+  👉 https://tech.dely.jp/entry/2019/12/11/103000
+
+[※ここに図解が入ります]
 
 ### 2. `@Published`・`PassthroughSubject`・`AnyPublisher`を利用した処理で画面要素と内部ロジック間を結合する処理のポイント
 
@@ -140,6 +145,7 @@ final class ArticlesViewModel: ArticlesViewModelType, ArticlesViewModelInputs, A
                     }
                 },
                 receiveValue: { [weak self] hashableObjects in
+
                     // 👉 記事データ一覧が取得できた場合は仲介役となる変数へ反映する
                     self?._articles = hashableObjects
                 }
@@ -174,8 +180,12 @@ override func viewDidLoad() {
         .subscribe(on: DispatchQueue.main)
         .sink(
             receiveValue: { [weak self] articles in
+
                 // TODO: 受け取った記事データの一覧を画面表示へ反映する 
-                // ※ UITableViewやUICollectionViewを利用した一覧表示処理等を実行する 
+                // 👉 UITableViewやUICollectionViewを利用した一覧表示処理等を実行する
+                // 例. UICollectionViewCompositionalLayout + DiffableDataSourceを利用した場合の流れ
+                // (1) 流れてきた値をCell表示要素へ変換し、NSDiffableDataSourceSnapshotへを追加する
+                // (2) 前の手順で作成したSnapshotを、UICollectionViewDiffableDataSourceに反映＆更新する
             }
         )
         .store(in: &cancellables)
@@ -274,6 +284,7 @@ final class NewsViewModel: ObservableObject {
                     }
                 },
                 receiveValue: { [weak self] hashableObjects in
+
                     // 👉 お知らせデータ一覧が取得できた場合はSwiftUI側でも利用する`@Published`で定義した変数へ反映する
                     self?.newsItem = hashableObjects
                 }
@@ -294,23 +305,29 @@ __【🌷お知らせ一覧を取得する「NewsViewModel.swift」を利用し�
 
 // 🌾 画面要素全体を構成するView要素におけるbody内の処理を抜粋したものになります。
 var body: some View {
+
     // 👉 お知らせデータの一覧をSwiftUIのList要素を利用して表示する想定です。
     // ※ViewModelの「Output」として定義した変数の状態に合わせて表示内容が変化する
     List {
         // (1) お知らせデータの一覧が0件の場合:
         if viewModel.newsItems.isEmpty {
+
             // (例) 表示前の「読み込み中...」の様な表示をするためのView 
             LoadingView()
+
         // (2) お知らせデータの一覧が少なくとも1件以上の場合:
         } else {
-           // 👉 お知らせデータの一覧をSwiftUIのList要素を利用して
+        
+            // 👉 お知らせデータの一覧をSwiftUIのList要素を利用して表示する
             ForEach(Array(viewModel.newsItems.enumerated())), id: \.offset) { index, newsItem in
+
                 // (例) 1件分のCell要素として内容を表示するためのView 
                 NewsListRowCell(newsItem: newsItem)
             }
         }
     } 
     .onAppear {
+
         // 👉 NewsViewModel内に定義した記事データの一覧取得処理を実行する 
         // ※ViewModelの「Input」に相当する部分と考えてOK
         viewModel.fetchNewsItems()
@@ -352,12 +369,15 @@ final class SimplePassthroughSubjectTests: XCTestCase {
         // 準備: 空のPassthroughSubjectを準備し変遷を記録可能にする
         let dessertNamePublisher = PassthroughSubject<String, Never>()
         let recorder = dessertNamePublisher.record()
+
         // その1: 1回目の内容を送る → `.next().get()`でPassthroughSubjectの最新を取得する
         dessertNamePublisher.send("🍪:チョコチップクッキー")
         try XCTAssertEqual(recorder.next().get(), "🍪:チョコチップクッキー")
+
         // その2: 2回目の内容を送る → `.next().get()`でPassthroughSubjectの最新を取得する
         dessertNamePublisher.send("🍦:ソフトクリーム")
         try XCTAssertEqual(recorder.next().get(), "🍦:ソフトクリーム")
+
         // その3: `availableElements`を下記の様な形で現在時点での「dessertNamePublisher」の変化全てを取得する
         let result = try! self.wait(for: recorder.availableElements, timeout: 0.16)
         XCTAssertEqual(result, ["🍪:チョコチップクッキー", "🍦:ソフトクリーム"])
@@ -377,9 +397,11 @@ final class SimpleObservableObjectTests: XCTestCase {
         // 準備: EatenMealStatus内に定義した`@Published`で定義した変数の変遷を記録可能にする
         let eatenMealStatus = EatenMealStatus()
         let recorder = eatenMealStatus.$currentValue.record()
+
         // 処理実行: EatenMealStatus内に定義した`@Published`で定義した変数の変遷を記録可能にする
         eatenMealStatus.update(inputValue: "🥪:BLTサンド")
         eatenMealStatus.update(inputValue: "🍜:味噌ラーメン")
+
         // `availableElements`を下記の様な形で現在時点での「eatenMealStatus.$currentValue」の変化全てを取得する
         let recorderResult = try! self.wait(for: recorder.availableElements, timeout: 0.16)
         XCTAssertEqual(recorderResult, ["", "🥪:BLTサンド", "🍜:味噌ラーメン"])
@@ -399,9 +421,13 @@ final class SimpleObservableObjectTests: XCTestCase {
 }
 ```
 
-#### ⭐️3-2. 
+#### ⭐️3-2. シンプルなViewModelクラスに対する「Quick + Nimble + CombineExpectations」を利用したUnitTest例
 
 ここからは具体的な事例として、前述した __「⭐️2-2. SwiftUI利用時でのCombineを利用する処理イメージ」__ で紹介したViewModelクラスのテストコード記述例を考えてみます。後述するコードについてはAPI非同期通信処理における成功時のみの抜粋となりますが、実務でのコードでは失敗した場合等の処理についても考慮をした方が良いかと思います。他にも、コメント等の入力処理等をはじめとした、ユーザーからの入力に基づいてViewModel内部の値が変化する様な処理（例. バリデーション処理）等を考えていくUnitTest等でも応用または活用が可能です。
+
+CombineExpectationsを利用したCombineベースの処理におけるUnitTestのイメージは、RxTest・RxBlockingを利用したRxSwiftベースの処理におけるUnitTestのイメージとは全く違う様に思えますが、期待した値変化が正しく実行されているかを確認するという点は、形は違えど観点は同様かという印象です。
+
+__【🌷@Publishedで定義された値変化をテストする簡単な事例】__
 
 ```swift
 // ----------
@@ -454,7 +480,9 @@ final class NewsViewModelTest: QuickSpec {
             // CombineExpectationを利用してViewModel内の変数:newsItemの変化を記録するようにしたい
             // 👉 変数:newsItemで`@Published`を利用しているのでこの値変化を記録対象とする
             var newsItemsRecorder: Recorder<[NewsItem], Never>!
+
             context("API通信処理が成功した場合") {
+
                 // 👉 UnitTest実行前後で実行する処理
                 beforeEach {
                     newsItemsRecorder = sut.$newsItem.record()
@@ -462,10 +490,13 @@ final class NewsViewModelTest: QuickSpec {
                 afterEach {
                     newsItemsRecorder = nil
                 }
+
                 // 値変化を記録対象とする変数が、期待した変化をすること確認する
                 it("初期値:emptyItemsの内容 → 実行後:expectedNextItems となること") {
+
                     // 👉 ViewModel内処理を実行
                     sut.fetchNewsItems()
+
                     // 0.16秒間の変化を見て、期待した値変化となることを確認する
                     let newsItemsRecorderResult = try! self.wait(for: newsItemsRecorder.availableElements, timeout: 0.16)
                     expect(newsItemsRecorderResult).to(equal([emptyItems, expectedNextItems]))
@@ -476,9 +507,49 @@ final class NewsViewModelTest: QuickSpec {
 }
 ```
 
+### 小話. Combineに関する補足事項（Publisher.zipの最大値とSingle.zipの最大値はいくつ？）
+
+この部分では、本稿における本題とは少し離れてしまいますが、小さな余談としてCombineを利用した処理で活用する機会もあるOperatorに関連する豆知識をご紹介できればと思います。本稿でご紹介している「Combine + Quick + Nimble + CombineExpectations」の組み合わせを利用したUnitTestに関連する事例では触れておりませんが、Combineで実装されたコードを読み解いていく際やUnitTestを記述する際の参考になれば幸いです。
+
+以前にSingle.zipを利用した処理を作成した時に、RxSwiftにおいて、1つのSingle.zip(Obsevable.zip)で何個のObservableを接続できるかが気になった事があり、改めて内部実装を調べると1つのSingle.zip(Obsevable.zip)で処理を同時に取り扱う事ができる最大値は8つでした。では、Combineで似た様な振る舞いをするPublisher.zipではどうなるか？を調べてみると、最大値は4つでした。1つの画面で複数のAPI非同期通信処理結果を表示する様な場合で用いる際に利用する局面はあると思いますが、この様にRxSwiftと見比べをしてみると、同じ様な振る舞いをするOperatorであったとしても、ちょっとした様で大きな違いがあるなと、私自身がCombineに触れた際に感じた次第です。
+
+- __Publishers.Zip4に関するApple公式ドキュメント__
+  👉 https://developer.apple.com/documentation/combine/publishers/zip4
+
+__【Publisher.zipとRxSwiftのコード抜粋例】__
+
+```swift
+// ----------
+// MEMO: CombineのPublisher.zipは最大4つまでPublisherを同時接続可能
+// ※ CombineLatestは最大4つ / Mergeは最大8つまで可能
+// ----------
+struct Zip4<A, B, C, D> where A : Publisher, B : Publisher, C : Publisher, D : Publisher, 
+A.Failure == B.Failure, B.Failure == C.Failure, C.Failure == D.Failure
+
+// ----------
+// MEMO: (比較) RxSwiftのSingle.zipは最大8つまで同時接続可能
+// https://github.com/ReactiveX/RxSwift/blob/Articles/RxSwift/Observables/Zip%2Barity.swift
+// ----------
+public static func zip<E1, E2, E3, E4, E5, E6, E7, E8>(
+    _ source1: PrimitiveSequence<Trait, E1>, _ source2: PrimitiveSequence<Trait, E2>, 
+    _ source3: PrimitiveSequence<Trait, E3>, _ source4: PrimitiveSequence<Trait, E4>, 
+    _ source5: PrimitiveSequence<Trait, E5>, _ source6: PrimitiveSequence<Trait, E6>,
+    _ source7: PrimitiveSequence<Trait, E7>, _ source8: PrimitiveSequence<Trait, E8>, 
+    resultSelector: @escaping (E1, E2, E3, E4, E5, E6, E7, E8) throws -> Element
+    ) -> PrimitiveSequence<Trait, Element> {
+    return PrimitiveSequence(
+        raw: Observable.zip(
+            source1.asObservable(), source2.asObservable(), source3.asObservable(), source4.asObservable(), 
+            source5.asObservable(), source6.asObservable(), source7.asObservable(), source8.asObservable(), 
+            resultSelector: resultSelector
+        )
+    )
+}
+```
+
 ### まとめ
 
-（※文章の構成が必要）
+本稿では、Combineを利用した比較的シンプルな形のViewModelクラスに関する実装例と、動作を担保するためのUnitTestに関する簡単な実装例を中心に解説をしましたが、大まかな処理概要のイメージや内部処理で利用するOperatorを用いたロジックの実装部分については、RxSwift等のリアクティブなフレームワーク等を利用した経験を上手に生かしていける余地がある一方で、@Publishedを利用した処理等の様に「一見すると似てはいるが良く見てみると実は異なる」様な部分もある点には注意しながら考えていく必要がある場面もあるかと思います。Combineに関しては最近はあまり新しい動きがなさそうにも見える印象があるので、今後の動向が気になる所ではありますが、SwiftUIと合わせて利用する際の使い方や設計次第では力を発揮してくれる可能性は個人的に感じているで、UI実装や美しい表現への探求といった個人的に追いかけていきたいテーマはもちろんのこと、「Swift Concurrency」や「SwiftData」等のトピックスへのキャッチアップや理解を深めながら上手にCombineとも付き合って行ければと改めて感じた次第です。
 
 __※余談その1:__
 
@@ -489,12 +560,12 @@ __※余談その1:__
 
 __※余談その2:__
 
-本稿ではCombineを利用したUnitTestを説明する際に「CombineExpectations」を活用したコードの事例を中心に解説を進めて参りましたが、他のCombineを利用した実装でのUnitTestを考えていく際には、The Composable Architectureを開発しているPoint-FreeがOSSとして公開している下記の様なOSSを活用する手段もあります。
+本稿ではCombineを利用したUnitTestを説明する際に「CombineExpectations」を活用したコードの事例を中心に解説を進めて参りましたが、他のCombineを利用した実装でのUnitTestを考えていく際には「The Composable Architecture」を開発しているPoint-FreeがOSSとして公開している下記の様なOSSを活用する手段もあります。
 
 - __combine-schedulers__
   👉 https://github.com/pointfreeco/combine-schedulers
 
-### 御礼
+### 現職の皆様への感謝
 
 本稿の執筆に当たりましては、現在モバイルアプリ開発に携わらせて頂いている職場の方々には、この場をお借りして感謝の意を述べさせて頂きます。これまではRxSwift+UIKitを利用した開発の中で、仕様把握や機能担保のためにUnitTestを活用したり、実際に経験はありましたが、実際にCombineを有効活用したアーキテクチャに触れる機会やCombineを利用したUnitTestを事例にも数多く触れる事ができる機会を得られた事は、私にとって本当に貴重な経験でした。
 
