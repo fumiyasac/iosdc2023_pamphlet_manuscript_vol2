@@ -1,6 +1,6 @@
 # iOSDC Japan 2023パンフレット原稿 その2
 
-こちらは2023年9月に開催される[iOSDC Japan 2023](https://fortee.jp/iosdc-japan-2023)のパンフレット掲載用原稿(4ページ分)のリポジトリになります。
+こちらは2023年9月に開催される[iOSDC Japan 2023](https://fortee.jp/iosdc-japan-2023)のパンフレット掲載用原稿(8ページ分)のリポジトリになります。
 
 - [掲載原稿本文](https://github.com/fumiyasac/iosdc2023_pamphlet_manuscript_vol2/blob/main/manuscript.md)
 
